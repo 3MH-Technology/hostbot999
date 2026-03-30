@@ -537,16 +537,16 @@ export default function Dashboard() {
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-zinc-400">Used Memory</span>
-                        <span className="text-zinc-200 font-medium">{systemMetrics.memory} MB / {systemMetrics.totalmem ? Math.round(systemMetrics.totalmem / 1024 / 1024) : 'Unknown'} MB</span>
+                        <span className="text-zinc-200 font-medium">{systemMetrics.memory?.used || 0} MB / {systemMetrics.memory?.total || 'Unknown'} MB</span>
                       </div>
                       <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${systemMetrics.totalmem ? Math.min((systemMetrics.memory / (systemMetrics.totalmem / 1024 / 1024)) * 100, 100) : 0}%` }} />
+                        <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${systemMetrics.memory?.usagePercent || 0}%` }} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
                       <div>
                         <p className="text-xs text-zinc-500 uppercase">Free Memory</p>
-                        <p className="text-lg font-medium text-zinc-200">{systemMetrics.freemem ? Math.round(systemMetrics.freemem / 1024 / 1024) : 'Unknown'} MB</p>
+                        <p className="text-lg font-medium text-zinc-200">{systemMetrics.memory?.free || 'Unknown'} MB</p>
                       </div>
                     </div>
                   </div>
