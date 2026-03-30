@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: botops-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: botops-backend
+  template:
+    metadata:
+      labels:
+        app: botops-backend
+    spec:
+      containers:
+      - name: backend
+        image: botops-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: botops-secrets
+              key: database-url
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: botops-backend
+spec:
+  selector:
+    app: botops-backend
+  ports:
+  - port: 8000
+    targetPort: 8000
