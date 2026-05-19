@@ -13,6 +13,11 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const { name, language, code } = await request.json();
+
+        if (!name || !language || !code) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
         const id = Math.random().toString(36).substring(2, 10); // Generate simple ID
         
         db.prepare('INSERT INTO bots (id, name, language, code) VALUES (?, ?, ?, ?)').run(id, name, language, code);

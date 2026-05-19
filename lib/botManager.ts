@@ -20,15 +20,27 @@ export function startBot(id: string) {
     if (!fs.existsSync(botDir)) fs.mkdirSync(botDir, { recursive: true });
 
     // Write the bot code to a file
-    const ext = bot.language === 'python' ? 'py' : 'js';
+    let ext = 'js';
+    if (bot.language === 'python') ext = 'py';
+    if (bot.language === 'go') ext = 'go';
+
     const filePath = path.join(botDir, `bot.${ext}`);
     fs.writeFileSync(filePath, bot.code);
 
     // Determine command based on language
-    const cmd = bot.language === 'python' ? 'python3' : 'node';
+    let cmd = 'node';
+    let args = [filePath];
+
+    if (bot.language === 'python') {
+        cmd = 'python3';
+    } else if (bot.language === 'go') {
+        // For Go, we attempt to run the file using 'go run'
+        cmd = 'go';
+        args = ['run', filePath];
+    }
     
     // Spawn the bot process with restricted environment (Basic mitigation)
-    const proc = spawn(cmd, [filePath], {
+    const proc = spawn(cmd, args, {
         cwd: botDir,
         env: { ...process.env, NODE_ENV: 'production' },
         stdio: ['ignore', 'pipe', 'pipe'] // Disable stdin for security
@@ -94,6 +106,15 @@ export function stopBot(id: string) {
         db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('stopped', id);
         const logs = globalAny.botLogs.get(id) || [];
         logs.push(`[${new Date().toISOString()}] System: Bot stopped by user`);
+    }
+}
+
+export function cleanupBot(id: string) {
+    stopBot(id);
+    globalAny.botLogs.delete(id);
+    const botDir = path.join(process.cwd(), 'data', 'bots', id);
+    if (fs.existsSync(botDir)) {
+        fs.rmSync(botDir, { recursive: true, force: true });
     }
 }
 

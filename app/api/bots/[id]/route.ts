@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { stopBot } from '@/lib/botManager';
+import { cleanupBot } from '@/lib/botManager';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     try {
-        stopBot(id); // Stop if running
+        cleanupBot(id); // Stop and remove files
         db.prepare('DELETE FROM bots WHERE id = ?').run(id);
         return NextResponse.json({ success: true });
     } catch (error: any) {

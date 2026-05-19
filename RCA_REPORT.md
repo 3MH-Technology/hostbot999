@@ -1,20 +1,40 @@
-# Root Cause Analysis (RCA) - BotOps Platform
+# Root Cause Analysis (RCA) - BotOps Platform (Deep Dive)
 
 ## 1. Redundancy & Architectural Conflict
-- **Issue**: The system has two distinct "backends". One is implemented within Next.js API routes (`app/api/`), and another is a standalone Python FastAPI service (`backend/`).
-- **Symptoms**: `docker-compose.yml` points the frontend to the Python backend, but the Next.js app has its own logic in `lib/botManager.ts` and `lib/db.ts` that isn't shared with the Python backend. Nginx routes `/api/` to the Python backend, potentially breaking Next.js internal API calls if they are used.
-- **Root Cause**: Architectural drift or incomplete migration between a Python-based backend and a Next.js full-stack implementation.
+- **Issue**: Dual backend systems (Python FastAPI & Next.js API).
+- **5 Whys**:
+  1. *Why are there two backends?* Because the project was likely in the middle of a migration or built by different teams.
+  2. *Why wasn't the migration completed?* Lack of unified architectural vision or time constraints.
+  3. *Why does this matter?* It causes confusion, resource waste, and potential bugs in routing (Nginx).
+  4. *Why is routing affected?* Nginx tries to proxy to a service that might not be the source of truth.
+  5. *Root Cause*: Failure to enforce a single source of truth for the system's business logic.
+- **Classification**: Architecture / Stability.
 
 ## 2. Authentication & Authorization Flaws
-- **Issue**: Hardcoded credentials in `app/api/auth/route.ts`.
-- **Symptoms**: Vulnerability to unauthorized access if source code is exposed. Lack of JWT verification middleware on sensitive endpoints (`/api/bots`, `/api/system`).
-- **Root Cause**: Reliance on "security by obscurity" and lack of a unified authentication middleware.
+- **Issue**: Hardcoded credentials and unprotected API routes.
+- **5 Whys**:
+  1. *Why are credentials hardcoded?* Easier for initial development and testing.
+  2. *Why weren't they moved to environment variables?* Negligence in following production-ready security practices.
+  3. *Why are API routes unprotected?* Lack of a centralized middleware implementation.
+  4. *Why was middleware missing?* The developer assumed the frontend was the only consumer.
+  5. *Root Cause*: Absence of a "Security-First" development mindset and lack of automated security linting.
+- **Classification**: Security.
 
 ## 3. Remote Code Execution (RCE) by Design
-- **Issue**: The platform allows execution of arbitrary Python/Node.js code.
-- **Symptoms**: `lib/botManager.ts` uses `spawn()` to run user-provided code directly on the host/container.
-- **Root Cause**: Lack of sandboxing (e.g., Docker containers for bots) for bot execution. While the platform is for a "single admin," a compromised admin account leads to full system compromise.
+- **Issue**: Executing arbitrary code on the host without isolation.
+- **5 Whys**:
+  1. *Why is code executed directly?* Simplest way to implement a "Bot Runner".
+  2. *Why is there no isolation?* Docker-in-Docker or VM isolation is complex to set up.
+  3. *Why is this a critical risk?* One malicious script can take over the entire server.
+  4. *Why wasn't this addressed?* The system was designed for a "trusted" single admin, ignoring the risk of account compromise.
+  5. *Root Cause*: Prioritizing ease of implementation over fundamental system security (Sandboxing).
+- **Classification**: Security / Risk Management.
 
-## 4. Environment Configuration
-- **Issue**: Hardcoded values in `nginx.conf` and `next.config.ts`.
-- **Root Cause**: Static configuration files instead of template-based or environment-driven configurations.
+## 4. Resource Management
+- **Issue**: No limits on bot CPU/RAM usage.
+- **5 Whys**:
+  1. *Why are there no limits?* Default behavior of `spawn` is unrestricted.
+  2. *Why wasn't monitoring implemented?* Complexity of tracking child process metrics in real-time.
+  3. *Why is this a problem?* A single bot can DoS (Denial of Service) the entire platform.
+  4. *Root Cause*: Lack of resource quotas and health monitoring in the process manager.
+- **Classification**: Performance / Stability.

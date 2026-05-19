@@ -204,9 +204,14 @@ export default function Dashboard() {
   };
 
   const handleLanguageChange = (lang: string) => {
-    const defaultCode = lang === 'python' 
-      ? 'import time\nprint("Bot started successfully!")\nwhile True:\n    print("Ping from Python Bot")\n    time.sleep(5)'
-      : "console.log('Bot started successfully!');\nsetInterval(() => console.log('Ping from Node.js Bot'), 5000);";
+    let defaultCode = "console.log('Bot started successfully!');\nsetInterval(() => console.log('Ping from Node.js Bot'), 5000);";
+
+    if (lang === 'python') {
+      defaultCode = 'import time\nprint("Bot started successfully!")\nwhile True:\n    print("Ping from Python Bot")\n    time.sleep(5)';
+    } else if (lang === 'go') {
+      defaultCode = 'package main\n\nimport (\n\t"fmt"\n\t"time"\n)\n\nfunc main() {\n\tfmt.Println("Bot started successfully!")\n\tfor {\n\t\tfmt.Println("Ping from Go Bot")\n\t\ttime.Sleep(5 * time.Second)\n\t}\n}';
+    }
+
     setNewBot({ ...newBot, language: lang, code: defaultCode });
   };
 
@@ -781,6 +786,13 @@ export default function Dashboard() {
                       className={`py-2.5 border rounded-lg text-sm font-medium transition-colors ${newBot.language === 'python' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
                     >
                       Python 3
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLanguageChange('go')}
+                      className={`py-2.5 border rounded-lg text-sm font-medium transition-colors ${newBot.language === 'go' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+                    >
+                      Go (Golang)
                     </button>
                   </div>
                 </div>
