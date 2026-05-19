@@ -8,10 +8,8 @@ export async function GET() {
         const usedMem = totalMem - freeMem;
         
         const cpus = os.cpus();
-        const loadAvg = os.loadavg(); // Returns an array containing the 1, 5, and 15 minute load averages
+        const loadAvg = os.loadavg();
         
-        // Calculate a rough CPU usage percentage based on load average
-        // This is an approximation. For exact CPU usage, we'd need to sample over time.
         const cpuUsage = Math.min(100, Math.round((loadAvg[0] / cpus.length) * 100));
 
         return NextResponse.json({
@@ -26,7 +24,8 @@ export async function GET() {
             platform: os.platform(),
             arch: os.arch(),
             cpus: cpus.length,
-            loadAvg
+            loadAvg,
+            nodeVersion: process.version
         });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

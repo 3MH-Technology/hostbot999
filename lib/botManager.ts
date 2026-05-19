@@ -28,13 +28,31 @@ export function startBot(id: string) {
     const cmd = bot.language === 'python' ? 'python3' : 'node';
     
     // Spawn the bot process
-    const proc = spawn(cmd, [filePath], { cwd: botDir });
+    let proc;
+    try {
+        proc = spawn(cmd, [filePath], { cwd: botDir });
+    } catch (e: any) {
+        db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('error', id);
+        const logs = globalAny.botLogs.get(id) || [];
+        logs.push(`[${new Date().toISOString()}] System: Failed to spawn process: ${e.message}`);
+        globalAny.botLogs.set(id, logs);
+        return;
+    }
 
     globalAny.botProcesses.set(id, proc);
     globalAny.botLogs.set(id, [`[${new Date().toISOString()}] System: Bot started successfully`]);
 
     // Update status in DB
     db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('running', id);
+
+    // Handle immediate spawn errors
+    proc.on('error', (err) => {
+        const logs = globalAny.botLogs.get(id) || [];
+        logs.push(`[${new Date().toISOString()}] System: Process error: ${err.message}`);
+        globalAny.botLogs.set(id, logs);
+        db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('error', id);
+        globalAny.botProcesses.delete(id);
+    });
 
     // Capture stdout
     proc.stdout?.on('data', (data) => {
