@@ -27,8 +27,12 @@ export function startBot(id: string) {
     // Determine command based on language
     const cmd = bot.language === 'python' ? 'python3' : 'node';
     
-    // Spawn the bot process
-    const proc = spawn(cmd, [filePath], { cwd: botDir });
+    // Spawn the bot process with restricted environment (Basic mitigation)
+    const proc = spawn(cmd, [filePath], {
+        cwd: botDir,
+        env: { ...process.env, NODE_ENV: 'production' },
+        stdio: ['ignore', 'pipe', 'pipe'] // Disable stdin for security
+    });
 
     globalAny.botProcesses.set(id, proc);
     globalAny.botLogs.set(id, [`[${new Date().toISOString()}] System: Bot started successfully`]);

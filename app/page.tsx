@@ -41,7 +41,10 @@ export default function Dashboard() {
   // Fetch all bots
   const fetchBots = async () => {
     try {
-      const res = await fetch('/api/bots');
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch('/api/bots', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (!res.ok) return;
       const data = await res.json();
       setBots(data);
@@ -71,9 +74,11 @@ export default function Dashboard() {
     
     const fetchDetails = async () => {
       try {
+        const token = localStorage.getItem('auth_token');
+        const headers = { 'Authorization': `Bearer ${token}` };
         const [logsRes, metricsRes] = await Promise.all([
-          fetch(`/api/bots/${selectedBot.id}/logs`),
-          fetch(`/api/bots/${selectedBot.id}/metrics`)
+          fetch(`/api/bots/${selectedBot.id}/logs`, { headers }),
+          fetch(`/api/bots/${selectedBot.id}/metrics`, { headers })
         ]);
         
         if (logsRes.ok) {
@@ -115,7 +120,10 @@ export default function Dashboard() {
     
     const fetchSystemMetrics = async () => {
       try {
-        const res = await fetch('/api/system');
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch('/api/system', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
           setSystemMetrics(data);
@@ -130,14 +138,24 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [activeTab]);
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Temporary logic for demonstration in verification,
+    // In actual use, the user would login via a form and token saved to localStorage
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBot.name.trim()) return;
     
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch('/api/bots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newBot)
       });
       setIsCreating(false);
@@ -163,8 +181,10 @@ export default function Dashboard() {
     const targetId = botId || selectedBot?.id;
     if (!targetId) return;
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch(`/api/bots/${targetId}${action === 'delete' ? '' : `/${action}`}`, { 
-        method: action === 'delete' ? 'DELETE' : 'POST' 
+        method: action === 'delete' ? 'DELETE' : 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (action === 'delete' && selectedBot?.id === targetId) {
         setSelectedBot(null);
@@ -182,8 +202,12 @@ export default function Dashboard() {
   const handleDeleteAllBots = async () => {
     try {
       setIsDeletingAll(false);
+      const token = localStorage.getItem('auth_token');
       await Promise.all(bots.map(bot => 
-        fetch(`/api/bots/${bot.id}`, { method: 'DELETE' })
+        fetch(`/api/bots/${bot.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
       ));
       setSelectedBot(null);
       setLogs([]);
@@ -268,7 +292,7 @@ export default function Dashboard() {
                   { label: "Total Bots", value: bots.length.toString(), icon: Bot, color: "text-blue-400" },
                   { label: "Running", value: runningBotsCount.toString(), icon: Play, color: "text-emerald-400" },
                   { label: "Errors", value: errorBotsCount.toString(), icon: AlertTriangle, color: "text-rose-400" },
-                  { label: "System Load", value: `${systemMetrics.cpu}%`, icon: Cpu, color: "text-amber-400" },
+                  { label: "System Load", value: `${systemMetrics.cpuUsage ?? 0}%`, icon: Cpu, color: "text-amber-400" },
                 ].map((stat, i) => (
                   <div key={i} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-center justify-between">
                     <div>
@@ -509,10 +533,10 @@ export default function Dashboard() {
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-zinc-400">Total Usage</span>
-                        <span className="text-zinc-200 font-medium">{systemMetrics.cpu}%</span>
+                        <span className="text-zinc-200 font-medium">{systemMetrics.cpuUsage ?? 0}%</span>
                       </div>
                       <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(systemMetrics.cpu, 100)}%` }} />
+                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(systemMetrics.cpuUsage ?? 0, 100)}%` }} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
