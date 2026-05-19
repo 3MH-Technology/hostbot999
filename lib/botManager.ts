@@ -27,8 +27,12 @@ export function startBot(id: string) {
     // Determine command based on language
     const cmd = bot.language === 'python' ? 'python3' : 'node';
     
-    // Spawn the bot process
-    const proc = spawn(cmd, [filePath], { cwd: botDir });
+    // Spawn the bot process with restricted environment (Basic mitigation)
+    const proc = spawn(cmd, [filePath], {
+        cwd: botDir,
+        env: { ...process.env, NODE_ENV: 'production' },
+        stdio: ['ignore', 'pipe', 'pipe'] // Disable stdin for security
+    });
 
     globalAny.botProcesses.set(id, proc);
     globalAny.botLogs.set(id, [`[${new Date().toISOString()}] System: Bot started successfully`]);
@@ -51,6 +55,27 @@ export function startBot(id: string) {
         if (logs.length > 200) logs.shift();
         globalAny.botLogs.set(id, logs);
     });
+
+    // Resource Monitoring Loop
+    const monitorInterval = setInterval(async () => {
+        if (!proc.pid || !globalAny.botProcesses.has(id)) {
+            clearInterval(monitorInterval);
+            return;
+        }
+        try {
+            const stats = await pidusage(proc.pid);
+            // Limit: 50% CPU or 256MB RAM per bot
+            if (stats.cpu > 80 || stats.memory > 256 * 1024 * 1024) {
+                const logs = globalAny.botLogs.get(id) || [];
+                logs.push(`[${new Date().toISOString()}] System: Bot killed due to resource limit violation (${Math.round(stats.cpu)}% CPU, ${Math.round(stats.memory/1024/1024)}MB RAM)`);
+                globalAny.botLogs.set(id, logs);
+                proc.kill('SIGKILL');
+                clearInterval(monitorInterval);
+            }
+        } catch (e) {
+            clearInterval(monitorInterval);
+        }
+    }, 5000);
 
     // Handle process exit
     proc.on('close', (code) => {

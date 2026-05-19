@@ -21,6 +21,10 @@ interface BotData {
 }
 
 export default function Dashboard() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+
   const [activeTab, setActiveTab] = useState("overview");
   const [bots, setBots] = useState<BotData[]>([]);
   const [selectedBot, setSelectedBot] = useState<BotData | null>(null);
@@ -41,7 +45,10 @@ export default function Dashboard() {
   // Fetch all bots
   const fetchBots = async () => {
     try {
-      const res = await fetch('/api/bots');
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch('/api/bots', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (!res.ok) return;
       const data = await res.json();
       setBots(data);
@@ -58,12 +65,19 @@ export default function Dashboard() {
     }
   };
 
+  // Check auth on load
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) setIsAuthenticated(true);
+  }, []);
+
   // Initial load and polling for bots status
   useEffect(() => {
+    if (!isAuthenticated) return;
     fetchBots();
     const interval = setInterval(fetchBots, 3000);
     return () => clearInterval(interval);
-  }, [selectedBot?.id]); // Re-bind if selectedBot changes to keep reference fresh
+  }, [selectedBot?.id, isAuthenticated]);
 
   // Fetch logs & metrics for the selected bot
   useEffect(() => {
@@ -71,9 +85,11 @@ export default function Dashboard() {
     
     const fetchDetails = async () => {
       try {
+        const token = localStorage.getItem('auth_token');
+        const headers = { 'Authorization': `Bearer ${token}` };
         const [logsRes, metricsRes] = await Promise.all([
-          fetch(`/api/bots/${selectedBot.id}/logs`),
-          fetch(`/api/bots/${selectedBot.id}/metrics`)
+          fetch(`/api/bots/${selectedBot.id}/logs`, { headers }),
+          fetch(`/api/bots/${selectedBot.id}/metrics`, { headers })
         ]);
         
         if (logsRes.ok) {
@@ -115,7 +131,10 @@ export default function Dashboard() {
     
     const fetchSystemMetrics = async () => {
       try {
-        const res = await fetch('/api/system');
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch('/api/system', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
           setSystemMetrics(data);
@@ -130,14 +149,46 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [activeTab]);
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginData)
+      });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        localStorage.setItem('auth_token', data.token);
+        setIsAuthenticated(true);
+      } else {
+        setLoginError(data.message || data.error || "Invalid credentials");
+      }
+    } catch (e) {
+      setLoginError("Connection failed");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    setIsAuthenticated(false);
+    setBots([]);
+    setSelectedBot(null);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBot.name.trim()) return;
     
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch('/api/bots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newBot)
       });
       setIsCreating(false);
@@ -163,8 +214,10 @@ export default function Dashboard() {
     const targetId = botId || selectedBot?.id;
     if (!targetId) return;
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch(`/api/bots/${targetId}${action === 'delete' ? '' : `/${action}`}`, { 
-        method: action === 'delete' ? 'DELETE' : 'POST' 
+        method: action === 'delete' ? 'DELETE' : 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (action === 'delete' && selectedBot?.id === targetId) {
         setSelectedBot(null);
@@ -182,8 +235,12 @@ export default function Dashboard() {
   const handleDeleteAllBots = async () => {
     try {
       setIsDeletingAll(false);
+      const token = localStorage.getItem('auth_token');
       await Promise.all(bots.map(bot => 
-        fetch(`/api/bots/${bot.id}`, { method: 'DELETE' })
+        fetch(`/api/bots/${bot.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
       ));
       setSelectedBot(null);
       setLogs([]);
@@ -196,6 +253,59 @@ export default function Dashboard() {
 
   const runningBotsCount = bots.filter(b => b.status === 'running').length;
   const errorBotsCount = bots.filter(b => b.status === 'error').length;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4">
+              <Server className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h1 className="text-2xl font-bold text-zinc-100">Welcome to BotOps</h1>
+            <p className="text-zinc-500 text-sm mt-2">Sign in to manage your bot fleet</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">Username</label>
+              <input
+                type="text"
+                required
+                value={loginData.username}
+                onChange={(e) => setLoginData({...loginData, username: e.target.value})}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                placeholder="Enter username"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">Password</label>
+              <input
+                type="password"
+                required
+                value={loginData.password}
+                onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                placeholder="••••••••"
+              />
+            </div>
+            {loginError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center">
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {loginError}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 active:scale-[0.98] mt-2"
+            >
+              Sign In
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
@@ -227,7 +337,10 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="p-4 border-t border-zinc-800">
-          <button className="w-full flex items-center px-3 py-2 text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-3 py-2 text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
             <LogOut className="w-5 h-5 mr-3" />
             <span className="font-medium text-sm">Logout</span>
           </button>
@@ -268,7 +381,7 @@ export default function Dashboard() {
                   { label: "Total Bots", value: bots.length.toString(), icon: Bot, color: "text-blue-400" },
                   { label: "Running", value: runningBotsCount.toString(), icon: Play, color: "text-emerald-400" },
                   { label: "Errors", value: errorBotsCount.toString(), icon: AlertTriangle, color: "text-rose-400" },
-                  { label: "System Load", value: `${systemMetrics.cpu}%`, icon: Cpu, color: "text-amber-400" },
+                  { label: "System Load", value: `${systemMetrics.cpuUsage ?? 0}%`, icon: Cpu, color: "text-amber-400" },
                 ].map((stat, i) => (
                   <div key={i} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 flex items-center justify-between">
                     <div>
@@ -509,10 +622,10 @@ export default function Dashboard() {
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-zinc-400">Total Usage</span>
-                        <span className="text-zinc-200 font-medium">{systemMetrics.cpu}%</span>
+                        <span className="text-zinc-200 font-medium">{systemMetrics.cpuUsage ?? 0}%</span>
                       </div>
                       <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(systemMetrics.cpu, 100)}%` }} />
+                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(systemMetrics.cpuUsage ?? 0, 100)}%` }} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
