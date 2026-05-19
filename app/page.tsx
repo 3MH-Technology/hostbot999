@@ -21,6 +21,10 @@ interface BotData {
 }
 
 export default function Dashboard() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+
   const [activeTab, setActiveTab] = useState("overview");
   const [bots, setBots] = useState<BotData[]>([]);
   const [selectedBot, setSelectedBot] = useState<BotData | null>(null);
@@ -61,12 +65,19 @@ export default function Dashboard() {
     }
   };
 
+  // Check auth on load
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) setIsAuthenticated(true);
+  }, []);
+
   // Initial load and polling for bots status
   useEffect(() => {
+    if (!isAuthenticated) return;
     fetchBots();
     const interval = setInterval(fetchBots, 3000);
     return () => clearInterval(interval);
-  }, [selectedBot?.id]); // Re-bind if selectedBot changes to keep reference fresh
+  }, [selectedBot?.id, isAuthenticated]);
 
   // Fetch logs & metrics for the selected bot
   useEffect(() => {
@@ -140,8 +151,30 @@ export default function Dashboard() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Temporary logic for demonstration in verification,
-    // In actual use, the user would login via a form and token saved to localStorage
+    setLoginError("");
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginData)
+      });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        localStorage.setItem('auth_token', data.token);
+        setIsAuthenticated(true);
+      } else {
+        setLoginError(data.message || data.error || "Invalid credentials");
+      }
+    } catch (e) {
+      setLoginError("Connection failed");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    setIsAuthenticated(false);
+    setBots([]);
+    setSelectedBot(null);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -221,6 +254,59 @@ export default function Dashboard() {
   const runningBotsCount = bots.filter(b => b.status === 'running').length;
   const errorBotsCount = bots.filter(b => b.status === 'error').length;
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4">
+              <Server className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h1 className="text-2xl font-bold text-zinc-100">Welcome to BotOps</h1>
+            <p className="text-zinc-500 text-sm mt-2">Sign in to manage your bot fleet</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">Username</label>
+              <input
+                type="text"
+                required
+                value={loginData.username}
+                onChange={(e) => setLoginData({...loginData, username: e.target.value})}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                placeholder="Enter username"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">Password</label>
+              <input
+                type="password"
+                required
+                value={loginData.password}
+                onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                placeholder="••••••••"
+              />
+            </div>
+            {loginError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center">
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {loginError}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 active:scale-[0.98] mt-2"
+            >
+              Sign In
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
       {/* Sidebar */}
@@ -251,7 +337,10 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="p-4 border-t border-zinc-800">
-          <button className="w-full flex items-center px-3 py-2 text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-3 py-2 text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
             <LogOut className="w-5 h-5 mr-3" />
             <span className="font-medium text-sm">Logout</span>
           </button>

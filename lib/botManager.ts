@@ -56,6 +56,27 @@ export function startBot(id: string) {
         globalAny.botLogs.set(id, logs);
     });
 
+    // Resource Monitoring Loop
+    const monitorInterval = setInterval(async () => {
+        if (!proc.pid || !globalAny.botProcesses.has(id)) {
+            clearInterval(monitorInterval);
+            return;
+        }
+        try {
+            const stats = await pidusage(proc.pid);
+            // Limit: 50% CPU or 256MB RAM per bot
+            if (stats.cpu > 80 || stats.memory > 256 * 1024 * 1024) {
+                const logs = globalAny.botLogs.get(id) || [];
+                logs.push(`[${new Date().toISOString()}] System: Bot killed due to resource limit violation (${Math.round(stats.cpu)}% CPU, ${Math.round(stats.memory/1024/1024)}MB RAM)`);
+                globalAny.botLogs.set(id, logs);
+                proc.kill('SIGKILL');
+                clearInterval(monitorInterval);
+            }
+        } catch (e) {
+            clearInterval(monitorInterval);
+        }
+    }, 5000);
+
     // Handle process exit
     proc.on('close', (code) => {
         const logs = globalAny.botLogs.get(id) || [];
